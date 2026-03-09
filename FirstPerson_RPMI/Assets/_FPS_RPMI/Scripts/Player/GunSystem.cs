@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -21,7 +22,7 @@ public class GunSystem : MonoBehaviour
     [Header("Bullet Management")]
     [SerializeField] int ammoSize = 30; //Cantidad maxima de municion por cargador.
     [SerializeField] int BulletsPerTap = 1; //Cantidad de balas disparadas por ejecucion del disparo.
-    int bulletsLeft; //Cantidad de municion restante
+    [SerializeField] int bulletsLeft; //Cantidad de municion restante
 
     [Header("FeedbackReferences")]
     [SerializeField] GameObject impactEffect; //Ref al VFX de impacto de bala.
@@ -41,7 +42,43 @@ public class GunSystem : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        
+        if (canShoot && shooting && !reloading && bulletsLeft > 0)
+        {
+            //Inicializar el proceso de disparo
+            StartCoroutine(ShootRoutine());
+        }
+    }
+
+    IEnumerator ShootRoutine()
+    {
+        canShoot = false; //Primera capa de seguridad que evita que se apilen los disparos
+        if (!allowButtonHold) shooting = false; //Configuracion del disparo por tap
+        for (int i = 0; i < BulletsPerTap; i++)
+        {
+            if (bulletsLeft <= 0) break; //Segunda prevencion de errores
+
+            Shoot();//Disparo en si= Raycast que permite daño
+            bulletsLeft--;
+        }
+        yield return new WaitForSeconds(shootingCooldown); //Ejecucion de la espera entre disparos
+        canShoot = true;//Se devuelve la posibilidad de disparar
+
+    }
+    IEnumerator ReloadRoutine()
+    {
+        reloading = true; //Se activa modo recarga  = no se puede stackear la recarga
+        //Aqui iria la llamada a la animacion
+        yield return new WaitForSeconds(reloadTime);
+        bulletsLeft = ammoSize;
+        reloading = false;
+    }
+
+    void Reload()
+    {
+        if (bulletsLeft < ammoSize && !reloading)
+        {
+            StartCoroutine(ReloadRoutine());
+        }
     }
 
     void Shoot()
@@ -62,19 +99,34 @@ public class GunSystem : MonoBehaviour
         {
             //Aqui podemos codear todos los efectos que quiero para la interaccion;
             Debug.Log(hit.collider.name);
+            if (hit.collider.CompareTag("Enemy"))
+            {
+                EnemyHealth enemyHealth = hit.collider.GetComponent<EnemyHealth>();
+                enemyHealth.TakeDamage(damage);
+            }
         }
     }
 
-    #region Inputs
+    #region Inputs Methods
 
     public void OnShoot(InputAction.CallbackContext context)
     {
-        Shoot();
+        //El sistema de input debe comprobar si el disparo es por tap o por mantener
+        if (allowButtonHold)
+        {
+            //Modo mantener ON
+            shooting = context.ReadValueAsButton();
+        }
+        else
+        {
+            //Modo tap ON
+            if (context.performed) shooting = true;
+        }
     }
 
     public void Onreload(InputAction.CallbackContext context)
     {
-
+        if (context.performed) Reload();
     }
 
     #endregion
